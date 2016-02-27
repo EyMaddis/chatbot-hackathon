@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "botkit": "0.0.7",
-    "request": "^2.69.0"
+    "request": "^2.69.0",
+    "request-promise": "^2.0.1"
   }
 }
