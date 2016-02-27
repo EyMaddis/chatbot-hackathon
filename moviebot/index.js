@@ -29,24 +29,8 @@ controller.hears(['from (.+)'],['direct_message','direct_mention','mention'],fun
     console.log('got request', message);
     bot.reply(message, 'trying my best');
 
-    co(function*(){
-        const results = yield getFromMovieDB('search/person', {
-                query: message.match[1],
-                'sort_by': 'popularity.desc'
-            })
-        if(results.total_results <= 0) {
-            return; // no result
-        }
-        const people = results.results;
-        console.log('found people', typeof people);
-
-        const personId = people[0].id
-        const movies = yield getFromMovieDB('discover/movie', {
-            with_people: personId
-        });
-        return _.get(movies, 'results');
-
-    }).then(replyWithMovies).catch((err) => {
+    co(handleRequest(message)).then(replyWithMovies)
+    .catch((err) => {
             console.error('oh no', err, err.stack);
         bot.reply(message, 'oh no, I failed with my request');
     });
@@ -63,40 +47,32 @@ controller.hears(['from (.+)'],['direct_message','direct_mention','mention'],fun
             bot.reply(message, formatMovie(movie));
         });
     }
-    // const attachments = [];
-    // const attachment = {
-    //   title: 'This is an attachment',
-    //   color: '#FFCC99',
-    //   fields: [],
-    // };
-
-    // attachment.fields.push({
-    //   label: 'Field',
-    //   value: 'A longish value',
-    //   short: false,
-    // });
-
-    // attachment.fields.push({
-    //   label: 'Field',
-    //   value: 'Value',
-    //   short: true,
-    // });
-
-    // attachment.fields.push({
-    //   label: 'Field',
-    //   value: 'Value',
-    //   short: true,
-    // });
-
-    // attachments.push(attachment);
-
-    // bot.reply(message,{
-    // text: 'See below...',
-    // attachments: attachments,
-    // },function(err,resp) {
-    // console.log(err,resp);
-    // });
 });
+
+function* handleRequest(message){
+    const results = yield getFromMovieDB('search/person', {
+            query: message.match[1],
+            'sort_by': 'popularity.desc'
+        })
+    if(results.total_results <= 0) {
+        return; // no result
+    }
+    const people = results.results;
+
+    if(people.length > 1) {
+        // TODO: did you mean?
+    }
+
+    console.log('found people', typeof people);
+
+    const personId = people[0].id
+    const movies = yield getFromMovieDB('discover/movie', {
+        with_people: personId
+    });
+    return _.get(movies, 'results');
+
+}
+
 
 function getFromMovieDB(urlPart, query) {
     console.log('starting request', urlPart, query,getMovieDBUrl(urlPart, query));
