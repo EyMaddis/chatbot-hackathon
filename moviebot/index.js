@@ -28,26 +28,41 @@ controller.spawn({
 controller.hears(['from (.+)'],['direct_message','direct_mention','mention'],function(bot,message) {
     console.log('got request', message);
     bot.reply(message, 'trying my best');
-
-    co(handleRequest(message)).then(replyWithMovies)
-    .catch((err) => {
-            console.error('oh no', err, err.stack);
-        bot.reply(message, 'oh no, I failed with my request');
-    });
-
-    function replyWithMovies(movies) {
-        if(!movies || !movies.length) {
-            bot.reply(message, 'no results found :(')
-            return;
-        }
-
-
-        bot.reply(message, 'I found the following movies');
-        movies.forEach((movie) => {
-            bot.reply(message, formatMovie(movie));
-        });
-    }
+    bot.startConversation(message, startConversation(message))
 });
+
+
+function startConversation(message) {
+    return (response, conversation) => {
+        if(response !== null) {
+            console.error('response not null', response);
+            throw 'response not null'
+        }
+        console.log('conversation!', conversation);
+        co(handleRequest(message)).then(replyWithMovies)
+        .catch((err) => {
+                console.error('oh no', err, err.stack);
+            conversation.say('oh no, I failed with my request');
+            conversation.next();
+        });
+
+        function replyWithMovies(movies) {
+            if(!movies || !movies.length) {
+                conversation.say('no results found :(')
+                conversation.next();
+                return;
+            }
+
+
+            conversation.say('I found the following movies');
+            conversation.next();
+            movies.forEach((movie) => {
+                conversation.say(formatMovie(movie));
+                conversation.next();
+            });
+        }
+    };
+};
 
 function* handleRequest(message){
     const results = yield getFromMovieDB('search/person', {
@@ -59,9 +74,8 @@ function* handleRequest(message){
     }
     const people = results.results;
 
-    if(people.length > 1) {
-        // TODO: did you mean?
-    }
+
+    // yield* selectPerson(message, people);
 
     console.log('found people', typeof people);
 
@@ -72,6 +86,17 @@ function* handleRequest(message){
     return _.get(movies, 'results');
 
 }
+
+// function* selectPerson(message, people) {
+//     if(people.length == 1) {
+//         return people[0];
+//     } else {
+//         // did you mean XY - known for movie3? Conversation
+//         yield new Promise((resolve, reject) => {
+
+//         });
+//     }
+// }
 
 
 function getFromMovieDB(urlPart, query) {
