@@ -137,10 +137,18 @@ function* replyWithMovies(conversation, movies) {
     let stop = false;
     do {
         send();
-        stop = yield endCycle(conversation);
+        if(movies.length == 0) {
+            stop = true;
+        } else {
+            stop = yield endCycle(conversation);
+        }
     } while(!stop);
 
-    conversation.say(`It was a pleasure to serve you! I hope you enjoy ${movie.title}`);
+    if(movies.length > 0) {
+        conversation.say(`It was a pleasure to serve you! I hope you enjoy ${movie.title}`);
+    } else {
+        conversation.say('That\'s all I have for now. Try another request for more.');
+    }
     conversation.next();
 }
 
