@@ -45,32 +45,13 @@ function startConversation(message) {
 
         co(handleRequest(conversation, message.match[1]))
             .then((movies) => {
-                return co(replyWithMovies(movies));
+                return co(replyWithMovies(conversation, movies));
             })
             .catch((err) => {
                     console.error('oh no', err, err.stack);
                 conversation.say('oh no, I failed with my request');
                 conversation.next();
             });
-
-        function* replyWithMovies(movies) {
-            if(!movies || !movies.length) {
-                conversation.say('no results found :(')
-                conversation.next();
-                return;
-            }
-            console.log('found the movies!', conversation.status);
-
-            // TODO: cycle movies
-            const movie = movies.shift();
-            conversation.say(formatMovie(movie));
-            // movies.forEach((movie) => {
-            //     console.log('sending message for movie', movie.title);
-
-            //     // conversation.next();
-            // });
-            conversation.next();
-        }
     };
 };
 
@@ -138,6 +119,25 @@ function askPerson(conversation, person) {
     });
 }
 
+function* replyWithMovies(conversation, movies) {
+    if(!movies || !movies.length) {
+        conversation.say('no results found :(')
+        conversation.next();
+        return;
+    }
+    console.log('found the movies!', conversation.status);
+
+    // TODO: cycle movies
+    const movie = movies.shift();
+    conversation.say(formatMovie(movie));
+    // movies.forEach((movie) => {
+    //     console.log('sending message for movie', movie.title);
+
+    //     // conversation.next();
+    // });
+    conversation.next();
+}
+
 function getFromMovieDB(urlPart, query) {
     console.log('starting request', urlPart, query,getMovieDBUrl(urlPart, query));
     return request({
@@ -154,5 +154,6 @@ function getMovieDBUrl(urlPart, query) {
 
 function formatMovie(movie) {
     const year = movie.release_date.split('-')[0];
-    return `*${movie.title}* (_${year}_): \n ${movie.overview}`;
+    const poster = movie.poster_path? `Poster: https://image.tmdb.org/t/p/w185/${movie.poster_path}`: '';
+    return `*${movie.title}* (_${year}_): \n ${movie.overview} \n${poster}`;
 }
