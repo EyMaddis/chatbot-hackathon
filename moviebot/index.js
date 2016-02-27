@@ -182,6 +182,6 @@ function getMovieDBUrl(urlPart, query) {
 
 function formatMovie(movie) {
     const year = movie.release_date.split('-')[0];
-    const poster = movie.poster_path? `Poster: https://image.tmdb.org/t/p/w185/${movie.poster_path}`: '';
+    const poster = movie.poster_path? `Poster: https://image.tmdb.org/t/p/w185/${movie.poster_path}?${Date.now()}`: '';
     return `*${movie.title}* (_${year}_): \n ${movie.overview} \n${poster}`;
 }
