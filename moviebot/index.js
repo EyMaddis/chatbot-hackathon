@@ -34,39 +34,49 @@ controller.hears(['from (.+)'],['direct_message','direct_mention','mention'],fun
 
 function startConversation(message) {
     return (response, conversation) => {
+        // const originalIsActive = conversation.task.isActive;
+        // conversation.task.isActive = () => true;
+
+
         if(response !== null) {
             console.error('response not null', response);
             throw 'response not null'
         }
-        console.log('conversation!', conversation);
-        co(handleRequest(message)).then(replyWithMovies)
-        .catch((err) => {
-                console.error('oh no', err, err.stack);
-            conversation.say('oh no, I failed with my request');
-            conversation.next();
-        });
 
-        function replyWithMovies(movies) {
+        co(handleRequest(conversation, message.match[1]))
+            .then((movies) => {
+                return co(replyWithMovies(movies));
+            })
+            .catch((err) => {
+                    console.error('oh no', err, err.stack);
+                conversation.say('oh no, I failed with my request');
+                conversation.next();
+            });
+
+        function* replyWithMovies(movies) {
             if(!movies || !movies.length) {
                 conversation.say('no results found :(')
                 conversation.next();
                 return;
             }
+            console.log('found the movies!', conversation.status);
 
+            // TODO: cycle movies
+            const movie = movies.shift();
+            conversation.say(formatMovie(movie));
+            // movies.forEach((movie) => {
+            //     console.log('sending message for movie', movie.title);
 
-            conversation.say('I found the following movies');
+            //     // conversation.next();
+            // });
             conversation.next();
-            movies.forEach((movie) => {
-                conversation.say(formatMovie(movie));
-                conversation.next();
-            });
         }
     };
 };
 
-function* handleRequest(message){
+function* handleRequest(conversation, query){
     const results = yield getFromMovieDB('search/person', {
-            query: message.match[1],
+            query: query,
             'sort_by': 'popularity.desc'
         })
     if(results.total_results <= 0) {
@@ -75,29 +85,58 @@ function* handleRequest(message){
     const people = results.results;
 
 
-    // yield* selectPerson(message, people);
+    const person = yield selectPerson(conversation, people);
+    if(!person) {
+        return; // no result
+    }
 
-    console.log('found people', typeof people);
-
-    const personId = people[0].id
-    const movies = yield getFromMovieDB('discover/movie', {
-        with_people: personId
+    console.log('getting movies for', person.name);
+    const moviesResult = yield getFromMovieDB('discover/movie', {
+        with_people: person.id
     });
-    return _.get(movies, 'results');
-
+    const movies = _.get(moviesResult, 'results');
+    console.log('found %d movies', movies && movies.length, moviesResult.total_results);
+    return movies;
 }
 
-// function* selectPerson(message, people) {
-//     if(people.length == 1) {
-//         return people[0];
-//     } else {
-//         // did you mean XY - known for movie3? Conversation
-//         yield new Promise((resolve, reject) => {
+function* selectPerson(conversation, people) {
+    if(people.length === 0) {
+        console.log('no more people!');
+        return;
+    } else {
+        // did you mean XY - known for movie3? Conversation
+        const person = people.shift(); // shortens
+        console.log('trying again! Checking', person);
+        const foundPerson = yield askPerson(conversation, person);
+        if(foundPerson) {
+            return foundPerson;
+        }
+        console.log('trying again!');
+        return yield selectPerson(conversation, people);
+    }
+}
 
-//         });
-//     }
-// }
+function askPerson(conversation, person) {
+    const knownFor = person.known_for
+    let knownString = '';
+    if(knownFor && knownFor.length > 0) {
+        const titleList = knownFor.map(movie => `_${movie.title}_`).join(', ');
+        knownString = `, known for ${titleList}`;
+    }
 
+    return new Promise((resolve) => {
+        conversation.ask(`Did you mean *${person.name}*${knownString}? (yes/no)`, (response) => {
+            console.log('got response', response);
+            if(response.text.toLowerCase() === 'yes') {
+                return resolve(person);
+            } else {
+                resolve(false);
+                conversation.next(); // will break otherwise, but not if person was found!
+            }
+        });
+
+    });
+}
 
 function getFromMovieDB(urlPart, query) {
     console.log('starting request', urlPart, query,getMovieDBUrl(urlPart, query));
