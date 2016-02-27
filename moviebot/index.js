@@ -14,7 +14,7 @@ if (!process.env.token || !process.env.moviedb_key) {
 }
 
 const controller = Botkit.slackbot({
- debug: true
+ debug: false
 });
 
 controller.spawn({
@@ -39,6 +39,7 @@ controller.hears(['from (.+)'],['direct_message','direct_mention','mention'],fun
         }
         const people = results.results;
         console.log('found people', typeof people);
+
         const personId = people[0].id
         const movies = yield getFromMovieDB('discover/movie', {
             with_people: personId
@@ -55,23 +56,12 @@ controller.hears(['from (.+)'],['direct_message','direct_mention','mention'],fun
             bot.reply(message, 'no results found :(')
             return;
         }
-        const reply = {
-            text: 'I found these movies',
-            attachments: {
-                title: 'Your results ordered',
-                fields: movies.map(movie => {
-                    console.log('movie', movie.title);
-                    return {
-                        label: movie.title,
-                        value: movie.overview,
-                        color: '#FFCC99',
-                        short: false
-                    }
-                }).slice(0, 3)
-            }
-        };
-        console.log('reply', util.inspect(reply, true, 5, true));
-        bot.reply(message, reply);
+
+
+        bot.reply(message, 'I found the following movies');
+        movies.forEach((movie) => {
+            bot.reply(message, formatMovie(movie));
+        });
     }
     // const attachments = [];
     // const attachment = {
@@ -120,4 +110,9 @@ function getMovieDBUrl(urlPart, query) {
     query = query || {};
     query['api_key'] = process.env.moviedb_key;
     return `${movieDBURL}${urlPart}?${querystring.stringify(query)}`;
+}
+
+function formatMovie(movie) {
+    const year = movie.release_date.split('-')[0];
+    return `*${movie.title}* (_${year}_): \n ${movie.overview}`;
 }
