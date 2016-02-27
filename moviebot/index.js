@@ -119,6 +119,7 @@ function askPerson(conversation, person) {
     });
 }
 
+
 function* replyWithMovies(conversation, movies) {
     if(!movies || !movies.length) {
         conversation.say('no results found :(')
@@ -127,15 +128,34 @@ function* replyWithMovies(conversation, movies) {
     }
     console.log('found the movies!', conversation.status);
 
-    // TODO: cycle movies
-    const movie = movies.shift();
-    conversation.say(formatMovie(movie));
-    // movies.forEach((movie) => {
-    //     console.log('sending message for movie', movie.title);
+    let movie;
+    const send = () => {
+        movie = movies.shift()
+        conversation.say(formatMovie(movie));
+        conversation.next();
+    }
+    let stop = false;
+    do {
+        send();
+        stop = yield endCycle(conversation);
+    } while(!stop);
 
-    //     // conversation.next();
-    // });
+    conversation.say(`It was a pleasure to serve you! I hope you enjoy ${movie.title}`);
     conversation.next();
+}
+
+function endCycle(conversation) {
+    return new Promise((resolve) => {
+        conversation.ask(`Do you want another movie? (yes/no)`, (response) => {
+            conversation.next();
+            if(response.text.toLowerCase() === 'yes') {
+                return resolve(false);
+            } else {
+                resolve(true);
+            }
+        });
+
+    });
 }
 
 function getFromMovieDB(urlPart, query) {
