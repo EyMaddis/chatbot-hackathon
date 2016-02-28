@@ -67,29 +67,34 @@ function* handleRequest(conversation, query){
     console.log('HANDLE REQUEST 2');
 
     // todo get actor from wit response
-    const formattedWitResponse = formatWitResponse(witResponse);
-    console.log('witResponse', formattedWitResponse, util.inspect(witResponse, true, 5, true));
-    const actor = formattedWitResponse.directors[0]
-    console.log('found actor', actor);
+    const parsedRequest = formatWitResponse(witResponse);
 
-    const results = yield getFromMovieDB('search/person', {
-            query: actor,
-            'sort_by': 'popularity.desc'
-        })
-    if(results.total_results <= 0) {
-        return; // no result
+    const people = _.flatten([parsedRequest.actors, parsedRequest.directors]);
+
+    const peopleIds = [];
+    for(const name of people) {
+        const id = yield getPersonId(conversation, name);
+        peopleIds.push(id);
     }
-    const people = results.results;
+    console.log('people ids', peopleIds);
 
+    let invalidNames = people.filter((name, index) => {
+        return !peopleIds[index];
+    });
+    console.log('invalid Names!', invalidNames);
 
-    const person = yield selectPerson(conversation, people);
-    if(!person) {
-        return; // no result
+    if(invalidNames.length > 0) {
+        conversation.say(`Oh no, could not find ${invalidNames.length > 1? 'people':'person'} _${invalidNames.join('_, _')}_`);
+        conversation.next();
+        return;
     }
+    // console.log('witResponse', parsedRequest, util.inspect(witResponse, true, 5, true));
+    // const actor = parsedRequest.directors[0]
+    // console.log('found actor', actor);
 
-    console.log('getting movies for', person.name);
+    console.log('getting movies for the following people:', people);
     const moviesResult = yield getFromMovieDB('discover/movie', {
-        with_people: person.id
+        with_people: peopleIds.join('|')
     });
     const movies = _.get(moviesResult, 'results');
     console.log('found %d movies', movies && movies.length, moviesResult.total_results);
@@ -128,9 +133,9 @@ function askPerson(conversation, person) {
                 return resolve(person);
             } else {
                 resolve(false);
-                conversation.next(); // will break otherwise, but not if person was found!
             }
         });
+        conversation.next(); // will break otherwise, but not if person was found!
 
     });
 }
@@ -236,4 +241,21 @@ function processLanguage(sentence) {
         json: true,
         method: 'GET'
     });
+}
+
+function* getPersonId(conversation, name) {
+    const results = yield getFromMovieDB('search/person', {
+            query: name,
+            'sort_by': 'popularity.desc'
+        })
+    if(results.total_results <= 0) {
+        return; // no result
+    }
+    const people = results.results;
+
+    const person = yield selectPerson(conversation, people);
+    if(!person) {
+        return; // no result
+    }
+    return person.id;
 }
