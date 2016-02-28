@@ -7,9 +7,14 @@ const _ = require('lodash');
 const util = require('util');
 
 const movieDBURL = 'https://api.themoviedb.org/3/';
+const witURL = 'https://api.wit.ai/message';
 
-if (!process.env.token || !process.env.moviedb_key) {
-  console.log('Error: Specify token in environment and moviedb_key');
+const SLACK_TOKEN = process.env.token;
+const MOVIEDB_KEY = process.env.moviedb_key;
+const WIT_KEY = process.env.wit_key;
+
+if (!SLACK_TOKEN || !MOVIEDB_KEY || !WIT_KEY) {
+  console.log('Error: Specify token, moviedb_key and wit_key in environment when starting the service');
   process.exit(1);
 }
 
@@ -18,14 +23,14 @@ const controller = Botkit.slackbot({
 });
 
 controller.spawn({
-  token: process.env.token
+  token: SLACK_TOKEN
 }).startRTM(function(err) {
   if (err) {
     throw new Error(err);
   }
 });
 
-controller.hears(['from (.+)'],['direct_message','direct_mention','mention'],function(bot,message) {
+controller.hears(['(.*)'],['direct_message','direct_mention','mention'],function(bot,message) {
     console.log('got request', message);
     bot.reply(message, 'trying my best');
     bot.startConversation(message, startConversation(message))
@@ -48,7 +53,7 @@ function startConversation(message) {
                 return co(replyWithMovies(conversation, movies));
             })
             .catch((err) => {
-                    console.error('oh no', err, err.stack);
+                console.error('oh no', err, err.stack);
                 conversation.say('oh no, I failed with my request');
                 conversation.next();
             });
@@ -56,8 +61,19 @@ function startConversation(message) {
 };
 
 function* handleRequest(conversation, query){
+    query = query.replace(/<\w*>/,'');
+    console.log('HANDLE REQUEST 1', query);
+    const witResponse = yield processLanguage(query);
+    console.log('HANDLE REQUEST 2');
+
+    // todo get actor from wit response
+    const formattedWitResponse = formatWitResponse(witResponse);
+    console.log('witResponse', formattedWitResponse, util.inspect(witResponse, true, 5, true));
+    const actor = formattedWitResponse.directors[0]
+    console.log('found actor', actor);
+
     const results = yield getFromMovieDB('search/person', {
-            query: query,
+            query: actor,
             'sort_by': 'popularity.desc'
         })
     if(results.total_results <= 0) {
@@ -176,7 +192,7 @@ function getFromMovieDB(urlPart, query) {
 
 function getMovieDBUrl(urlPart, query) {
     query = query || {};
-    query['api_key'] = process.env.moviedb_key;
+    query['api_key'] = MOVIEDB_KEY;
     return `${movieDBURL}${urlPart}?${querystring.stringify(query)}`;
 }
 
@@ -184,4 +200,40 @@ function formatMovie(movie) {
     const year = movie.release_date.split('-')[0];
     const poster = movie.poster_path? `Poster: https://image.tmdb.org/t/p/w185/${movie.poster_path}?${Date.now()}`: '';
     return `*${movie.title}* (_${year}_): \n ${movie.overview} \n${poster}`;
+}
+
+function formatWitResponse(body) {
+  return {
+        actors: getPropertiesFromWitResponse('actor' ,body),
+        directors: getPropertiesFromWitResponse('director' ,body),
+        genres: getPropertiesFromWitResponse('genre' ,body),
+        year: _.get(body, 'outcomes[0].entities.year[0].value'),
+        movie: _.get(body, 'outcomes[0].entities.movie[0].value'),
+    };
+}
+
+function getPropertiesFromWitResponse(property, body) {
+  var sizeOfArguments;
+  const entity = _.get(body, `outcomes[0].entities[${property}]`);
+  const entityValues = [];
+  if(entity) {
+      for(let i=0; i < entity.length;i++) {
+        entityValues.push(entity[i].value);
+      }
+  }
+  return entityValues;
+}
+
+function processLanguage(sentence) {
+    console.log('XXXX', WIT_KEY);
+    const query = {
+        v: 20160227,
+        q: sentence,
+        access_token: WIT_KEY
+    };
+    return request.get({
+        url: `${witURL}?${querystring.stringify(query)}`,
+        json: true,
+        method: 'GET'
+    });
 }
