@@ -5,7 +5,7 @@ const querystring = require('querystring');
 const co = require('co');
 const _ = require('lodash');
 const util = require('util');
-const genreMapper = require('./genreMapping');
+const GenreMapper = require('./genreMapping');
 const LanguageProcessing = require('./languageProcessing');
 
 const movieDBURL = 'https://api.themoviedb.org/3/';
@@ -69,6 +69,7 @@ function* handleRequest(conversation, query){
 
     const actors = parsedRequest.actors;
     const directors = parsedRequest.directors;
+    const genres = parsedRequest.genres;
 
     const movieDBQuery = {};
 
@@ -92,11 +93,24 @@ function* handleRequest(conversation, query){
         }
         console.log('getting movies for the following people:', people);
         const ids = Object.keys(peopleNameToID).map(name => peopleNameToID[name]);
-        movieDBQuery.with_people = ids.join('|');
+        movieDBQuery.with_people = ids.join(' AND ');
     }
 
-    if(parsedRequest.genres) {
+    if(genres) {
+        const genreIds = genres.map(GenreMapper.toID);
+        const invalidGenres = [];
+        genres.forEach((genre, index) => {
+            if(!genreIds[index]) {
+                invalidGenres.push(genre);
+            }
+        })
 
+        if(invalidGenres.length > 0) {
+            conversation.say(`Oh no, I do not know the ${invalidGenres.length > 1? 'genres':'genre'} _${invalidGenres.join('_, _')}_`);
+            conversation.next();
+            return;
+        }
+        movieDBQuery.with_genres = genreIds.join(' AND ');
     }
 
     const moviesResult = yield getFromMovieDB('discover/movie', movieDBQuery);
