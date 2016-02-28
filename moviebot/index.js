@@ -117,7 +117,7 @@ function* handleRequest(conversation, query){
     }
 
     if(year) {
-        movieDBQuery.year = year;
+        movieDBQuery.primary_release_year = year;
     }
 
     if(genres) {
@@ -259,8 +259,12 @@ function* getPersonId(conversation, name) {
         return; // no result
     }
     const people = results.results;
-
-    const person = yield selectPerson(conversation, people);
+    let person;
+    if(people.length === 1) {
+        person = people[0];
+    } else {
+        person = yield selectPerson(conversation, people);
+    }
     if(!person) {
         return; // no result
     }
