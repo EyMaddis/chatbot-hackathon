@@ -5,6 +5,7 @@ const querystring = require('querystring');
 const co = require('co');
 const _ = require('lodash');
 const util = require('util');
+const genreMapper = require('./genreMapping');
 
 const movieDBURL = 'https://api.themoviedb.org/3/';
 const witURL = 'https://api.wit.ai/message';
@@ -68,19 +69,20 @@ function* handleRequest(conversation, query){
 
     // todo get actor from wit response
     const parsedRequest = formatWitResponse(witResponse);
+    const actors = parsedRequest.actors;
+    const directors = parsedRequest.directors;
 
-    const people = _.flatten([parsedRequest.actors, parsedRequest.directors]);
+    const people = _.flatten([actors, directors]);
 
-    const peopleIds = [];
+    const peopleNameToID = {};
     for(const name of people) {
         const id = yield getPersonId(conversation, name);
-        peopleIds.push(id);
+        peopleNameToID[name] = id;
     }
-    console.log('people ids', peopleIds);
+    console.log('people ids', peopleNameToID);
 
-    let invalidNames = people.filter((name, index) => {
-        return !peopleIds[index];
-    });
+    let invalidNames = people.filter(name => !peopleNameToID[name]);
+
     console.log('invalid Names!', invalidNames);
 
     if(invalidNames.length > 0) {
@@ -92,9 +94,10 @@ function* handleRequest(conversation, query){
     // const actor = parsedRequest.directors[0]
     // console.log('found actor', actor);
 
+
     console.log('getting movies for the following people:', people);
     const moviesResult = yield getFromMovieDB('discover/movie', {
-        with_people: peopleIds.join('|')
+        with_people: Object.keys(peopleNameToID).map(name => peopleNameToID[name]).join('|')
     });
     const movies = _.get(moviesResult, 'results');
     console.log('found %d movies', movies && movies.length, moviesResult.total_results);
