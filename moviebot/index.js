@@ -34,7 +34,15 @@ controller.spawn({
 
 controller.hears(['(.*)'],['direct_message','direct_mention','mention'],function(bot,message) {
     console.log('got request', message);
-    bot.reply(message, 'trying my best');
+    const responses = [
+        'Need to go into the archive',
+        'Digging deep...',
+        'This might take a while',
+        'I will answer your requets, but first I need to get rid of that dog chasing me...',
+        'gif me some searching'
+    ];
+    const randomResponse = responses[Math.floor(responses.length * Math.random())];
+    bot.reply(message, `Be right back. ${randomResponse}`);
     bot.startConversation(message, startConversation(message))
 });
 
@@ -100,11 +108,11 @@ function* handleRequest(conversation, query){
 
         if(actors.length > 0) {
             const ids = actors.map(getId);
-            movieDBQuery.with_cast = ids.join(' AND ');
+            movieDBQuery.with_cast = ids.join(',');
         }
         if(directors.length > 0) {
             const ids = directors.map(getId);
-            movieDBQuery.with_crew = ids.join(' AND ');
+            movieDBQuery.with_crew = ids.join(',');
         }
     }
 
@@ -126,7 +134,7 @@ function* handleRequest(conversation, query){
             conversation.next();
             return;
         }
-        movieDBQuery.with_genres = genreIds.join(' AND ');
+        movieDBQuery.with_genres = genreIds.join(',');
     }
 
 
@@ -201,7 +209,7 @@ function* replyWithMovies(conversation, movies) {
     } while(!stop);
 
     if(movies.length > 0) {
-        conversation.say(`It was a pleasure to serve you! I hope you enjoy ${movie.title}`);
+        conversation.say(`It was a pleasure to serve you! I hope you enjoy _${movie.title}_`);
     } else {
         conversation.say('That\'s all I have for now. Try another request for more.');
     }
@@ -210,12 +218,12 @@ function* replyWithMovies(conversation, movies) {
 
 function endCycle(conversation) {
     return new Promise((resolve) => {
-        conversation.ask(`Do you want another movie? (yes/no)`, (response) => {
+        conversation.ask(`Do you like this movie? (yes/no)`, (response) => {
             conversation.next();
             if(response.text.toLowerCase() === 'yes') {
-                return resolve(false);
+                return resolve(true);
             } else {
-                resolve(true);
+                resolve(false);
             }
         });
 
