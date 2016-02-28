@@ -70,6 +70,7 @@ function* handleRequest(conversation, query){
     const actors = parsedRequest.actors;
     const directors = parsedRequest.directors;
     const genres = parsedRequest.genres;
+    const year = parsedRequest.year;
 
     const movieDBQuery = {
         sort_by: 'popularity.desc'
@@ -94,8 +95,21 @@ function* handleRequest(conversation, query){
             return;
         }
         console.log('getting movies for the following people:', people);
-        const ids = Object.keys(peopleNameToID).map(name => peopleNameToID[name]);
-        movieDBQuery.with_people = ids.join(' AND ');
+        // const ids = Object.keys(peopleNameToID).map(name => peopleNameToID[name]);
+        const getId = actor => peopleNameToID[actor];
+
+        if(actors.length > 0) {
+            const ids = actors.map(getId);
+            movieDBQuery.with_cast = ids.join(' AND ');
+        }
+        if(directors.length > 0) {
+            const ids = directors.map(getId);
+            movieDBQuery.with_crew = ids.join(' AND ');
+        }
+    }
+
+    if(year) {
+        movieDBQuery.year = year;
     }
 
     if(genres) {
@@ -114,6 +128,7 @@ function* handleRequest(conversation, query){
         }
         movieDBQuery.with_genres = genreIds.join(' AND ');
     }
+
 
     const moviesResult = yield getFromMovieDB('discover/movie', movieDBQuery);
     const movies = _.get(moviesResult, 'results');
