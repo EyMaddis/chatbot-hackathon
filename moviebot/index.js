@@ -71,7 +71,9 @@ function* handleRequest(conversation, query){
     const directors = parsedRequest.directors;
     const genres = parsedRequest.genres;
 
-    const movieDBQuery = {};
+    const movieDBQuery = {
+        sort_by: 'popularity.desc'
+    };
 
     const people = _.flatten([actors, directors]);
     if(people.length > 0) {
