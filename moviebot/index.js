@@ -6,9 +6,9 @@ const co = require('co');
 const _ = require('lodash');
 const util = require('util');
 const genreMapper = require('./genreMapping');
+const LanguageProcessing = require('./languageProcessing');
 
 const movieDBURL = 'https://api.themoviedb.org/3/';
-const witURL = 'https://api.wit.ai/message';
 
 const SLACK_TOKEN = process.env.token;
 const MOVIEDB_KEY = process.env.moviedb_key;
@@ -18,6 +18,7 @@ if (!SLACK_TOKEN || !MOVIEDB_KEY || !WIT_KEY) {
   console.log('Error: Specify token, moviedb_key and wit_key in environment when starting the service');
   process.exit(1);
 }
+const languageProcessor = new LanguageProcessing(WIT_KEY);
 
 const controller = Botkit.slackbot({
  debug: false
@@ -64,41 +65,41 @@ function startConversation(message) {
 function* handleRequest(conversation, query){
     query = query.replace(/<\w*>/,'');
     console.log('HANDLE REQUEST 1', query);
-    const witResponse = yield processLanguage(query);
-    console.log('HANDLE REQUEST 2');
+    const parsedRequest = yield languageProcessor.process(query);
 
-    // todo get actor from wit response
-    const parsedRequest = formatWitResponse(witResponse);
     const actors = parsedRequest.actors;
     const directors = parsedRequest.directors;
 
+    const movieDBQuery = {};
+
     const people = _.flatten([actors, directors]);
+    if(people.length > 0) {
+        const peopleNameToID = {};
+        for(const name of people) {
+            const id = yield getPersonId(conversation, name);
+            peopleNameToID[name] = id;
+        }
+        console.log('people ids', peopleNameToID);
 
-    const peopleNameToID = {};
-    for(const name of people) {
-        const id = yield getPersonId(conversation, name);
-        peopleNameToID[name] = id;
+        let invalidNames = people.filter(name => !peopleNameToID[name]);
+
+        console.log('invalid Names!', invalidNames);
+
+        if(invalidNames.length > 0) {
+            conversation.say(`Oh no, could not find ${invalidNames.length > 1? 'people':'person'} _${invalidNames.join('_, _')}_`);
+            conversation.next();
+            return;
+        }
+        console.log('getting movies for the following people:', people);
+        const ids = Object.keys(peopleNameToID).map(name => peopleNameToID[name]);
+        movieDBQuery.with_people = ids.join('|');
     }
-    console.log('people ids', peopleNameToID);
 
-    let invalidNames = people.filter(name => !peopleNameToID[name]);
+    if(parsedRequest.genres) {
 
-    console.log('invalid Names!', invalidNames);
-
-    if(invalidNames.length > 0) {
-        conversation.say(`Oh no, could not find ${invalidNames.length > 1? 'people':'person'} _${invalidNames.join('_, _')}_`);
-        conversation.next();
-        return;
     }
-    // console.log('witResponse', parsedRequest, util.inspect(witResponse, true, 5, true));
-    // const actor = parsedRequest.directors[0]
-    // console.log('found actor', actor);
 
-
-    console.log('getting movies for the following people:', people);
-    const moviesResult = yield getFromMovieDB('discover/movie', {
-        with_people: Object.keys(peopleNameToID).map(name => peopleNameToID[name]).join('|')
-    });
+    const moviesResult = yield getFromMovieDB('discover/movie', movieDBQuery);
     const movies = _.get(moviesResult, 'results');
     console.log('found %d movies', movies && movies.length, moviesResult.total_results);
     return movies;
@@ -208,42 +209,6 @@ function formatMovie(movie) {
     const year = movie.release_date.split('-')[0];
     const poster = movie.poster_path? `Poster: https://image.tmdb.org/t/p/w185/${movie.poster_path}?${Date.now()}`: '';
     return `*${movie.title}* (_${year}_): \n ${movie.overview} \n${poster}`;
-}
-
-function formatWitResponse(body) {
-  return {
-        actors: getPropertiesFromWitResponse('actor' ,body),
-        directors: getPropertiesFromWitResponse('director' ,body),
-        genres: getPropertiesFromWitResponse('genre' ,body),
-        year: _.get(body, 'outcomes[0].entities.year[0].value'),
-        movie: _.get(body, 'outcomes[0].entities.movie[0].value'),
-    };
-}
-
-function getPropertiesFromWitResponse(property, body) {
-  var sizeOfArguments;
-  const entity = _.get(body, `outcomes[0].entities[${property}]`);
-  const entityValues = [];
-  if(entity) {
-      for(let i=0; i < entity.length;i++) {
-        entityValues.push(entity[i].value);
-      }
-  }
-  return entityValues;
-}
-
-function processLanguage(sentence) {
-    console.log('XXXX', WIT_KEY);
-    const query = {
-        v: 20160227,
-        q: sentence,
-        access_token: WIT_KEY
-    };
-    return request.get({
-        url: `${witURL}?${querystring.stringify(query)}`,
-        json: true,
-        method: 'GET'
-    });
 }
 
 function* getPersonId(conversation, name) {
